@@ -1,0 +1,53 @@
+---
+title: "1 Extract Road Geometry Data from Public Data Sources"
+output: html_notebook
+toc: true
+theme: spacelab
+highlight: kate
+---
+
+This article introduces the procedure to extract road geometry data from public data sources in R. Two data sources are explored: OpenStreetMap (OSM) and ArcGIS Feature Service.
+
+Required Libraries
+====================
+
+The following libraries are required.
+
+1. [osmdata](https://docs.ropensci.org/osmdata/articles/osmdata.html)
+
+2. [tidyverse](https://www.tidyverse.org/)
+
+3. [sf](https://r-spatial.github.io/sf/)
+
+4. [leaflet](https://rstudio.github.io/leaflet/)
+
+5. [httr2](https://httr2.r-lib.org/)
+
+
+```{r}
+library(osmdata)
+library(tidyverse)
+library(sf)
+library(leaflet)
+```
+
+
+OpenStreetMap
+====================
+Road geomety data can extracted using the 'osmdata' package in R. The functions to use are opq() and add_osm_feature(). The user inputs a bounding box and the parameter 'key' to get the desired roadway data. For example, To get the entire 
+
+```{r}
+bbox<-getbb("Georgia")
+
+roads <- bbox %>% opq() %>%
+  add_osm_feature(key = "highway", value = c("motorway")) %>%
+  osmdata_sf()
+
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
