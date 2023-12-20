@@ -2,7 +2,7 @@
 title: "1 - Request 2D Road Geometry from ArcGIS REST Service"
 output: html_document
 author: Xiaoming Yang, Ph.D., P.E.
-date: "2023-12-08"
+date: "2023-12-20"
 ---
 
 ```{r setup, include=FALSE}
@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This article introduces the procedure of using R to extract 2D road geometry data from a public ArcGIS REST service. The benefit of doing so is to avoid downloading the whole GIS files (sometimes in Gigabites), especially when only a subset of data is needed. 
 
-The method was originally posted in a [blog]((https://community.esri.com/t5/gis-life-blog/accessing-arcgis-rest-services-using-r/ba-p/898451)) on the esri community website. The main modification here is that the httr2 package is used instead of the httr.
+The method was originally posted in a [blog](https://community.esri.com/t5/gis-life-blog/accessing-arcgis-rest-services-using-r/ba-p/898451) on the esri community website. The main modification here is that the httr2 package is used instead of the httr.
 
 First, find the REST service that has the road geometry data. For example,
 

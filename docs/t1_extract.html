@@ -11,7 +11,7 @@
 
 <meta name="author" content="Xiaoming Yang, Ph.D., P.E." />
 
-<meta name="date" content="2023-12-08" />
+<meta name="date" content="2023-12-20" />
 
 <title>1 - Request 2D Road Geometry from ArcGIS REST Service</title>
 
@@ -353,7 +353,7 @@ display: none;
 <h1 class="title toc-ignore">1 - Request 2D Road Geometry from ArcGIS
 REST Service</h1>
 <h4 class="author">Xiaoming Yang, Ph.D., P.E.</h4>
-<h4 class="date">2023-12-08</h4>
+<h4 class="date">2023-12-20</h4>
 
 </div>
 
@@ -362,7 +362,7 @@ REST Service</h1>
 geometry data from a public ArcGIS REST service. The benefit of doing so
 is to avoid downloading the whole GIS files (sometimes in Gigabites),
 especially when only a subset of data is needed.</p>
-<p>The method was originally posted in a <a href="(https://community.esri.com/t5/gis-life-blog/accessing-arcgis-rest-services-using-r/ba-p/898451)">blog</a>
+<p>The method was originally posted in a <a href="https://community.esri.com/t5/gis-life-blog/accessing-arcgis-rest-services-using-r/ba-p/898451">blog</a>
 on the esri community website. The main modification here is that the
 httr2 package is used instead of the httr.</p>
 <p>First, find the REST service that has the road geometry data. For
