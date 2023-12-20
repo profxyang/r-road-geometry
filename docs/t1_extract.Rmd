@@ -1,0 +1,74 @@
+---
+title: "1 - Request 2D Road Geometry from ArcGIS REST Service"
+output: html_document
+author: Xiaoming Yang, Ph.D., P.E.
+date: "2023-12-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This article introduces the procedure of using R to extract 2D road geometry data from a public ArcGIS REST service. The benefit of doing so is to avoid downloading the whole GIS files (sometimes in Gigabites), especially when only a subset of data is needed. 
+
+The method was originally posted in a [blog]((https://community.esri.com/t5/gis-life-blog/accessing-arcgis-rest-services-using-r/ba-p/898451)) on the esri community website. The main modification here is that the httr2 package is used instead of the httr.
+
+First, find the REST service that has the road geometry data. For example,
+
+* [FHWA](https://www.fhwa.dot.gov/policyinformation/hpms/shapefiles.cfm)
+* [US Census](https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services/TIGER_Roads_2021_view/FeatureServer). 
+
+Next, study the GIS data structure (layers, fields, codes, etc.) of the source, and develop a strategy to query the desired data. Two example codes are provided below to extract the 2D shape of I-75 in Bartow County Georgia.
+
+### Example 1: FHWA Data
+
+Since the I-75 is the only interstate highway in Bartow County, we can filter the road based on county code '15' and functional class '1'.
+
+```{r}
+library(httr2)
+library(sf)
+url <- url_parse("https://geo.dot.gov/server/rest/services")
+url$path <- paste(url$path, "Hosted/HPMS_FULL_GA_2020/FeatureServer/0/query", sep = "/")
+url$query <- list(where = "COUNTY_CODE = 15 and F_SYSTEM = 1",
+                  outFields = "*",
+                  returnGeometry = "true",
+                  f = "geojson")
+request <- url_build(url)
+roads <- st_read(request)
+
+library(ggplot2)
+ggplot() + 
+  geom_sf(data = roads)
+```
+
+### Example 2 US Census Data
+In TIGERWeb data, interstate highway is coded as RTTYP = 'I'. When the location of the road cannot be filtered from the attributes, we can define a bounding box in the 'geometry' parameter of the query.
+
+```{r}
+library(httr2)
+library(sf)
+url <- url_parse("https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services")
+url$path <- paste(url$path, "TIGER_Roads_2021_view/FeatureServer/0/query", sep = "/")
+url$query <- list(where = "RTTYP = 'I'",
+                  geometryType = "esriGeometryEnvelope",
+                  geometry="-85.05,34.08,-84.66,34.39",
+                  spatialRel="esriSpatialRelEnvelopeIntersects",
+                  outFields = "*",
+                  returnGeometry = "true",
+                  f = "geojson")
+request <- url_build(url)
+roads<-st_read(request)
+
+library(ggplot2)
+ggplot() + 
+  geom_sf(data = roads)
+
+```
+
+Footnotes:
+
+There are a few other solutions in R.
+
+* The 'tigris' package can also be used to extract the most updated US Census road data
+* The 'googleway' package can be used to extract google road data.
+* The 'osmdata' package can be used to extract OpenStreetMap road data.
