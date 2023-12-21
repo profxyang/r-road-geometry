@@ -1,0 +1,62 @@
+---
+title: "1b - Extract 2D Road Geometry from OpenStreetMap (OSM)"
+author: "Xiaoming Yang"
+date: "2023-12-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This article introduces the procedure of using R to extract 2D road geometry data from OpenStreetMap and then plot the result using the 'leaflet' package. To extract roadway geometry data, we to create a overpass query using the 'osmdata' package.
+
+First, load the required packages.
+
+```{r message=FALSE}
+library(osmdata)
+library(leaflet)
+```
+
+The example code below extracts the geometry of I-75 in Bartow County, Georgia. Since I-75 is the only separated, controlled-access highway in the Bartow County, it is sufficient to extract 'motorway' features from the query. The overpass query returns a list 'opq' which includes linestring and point features of the roadway. Here we plot the linestring feature together with the bounding box of the county.  
+
+```{r}
+bbox <- getbb("Bartow County, Georgia") 
+opq <- bbox %>% opq() %>%
+  add_osm_feature(key = "highway", value = c("motorway")) %>%
+  osmdata_sf()
+roads <- opq$osm_lines
+
+leaflet() %>%
+  addTiles() %>%
+    addPolylines(data = roads, color = "black", weight = 2) %>%
+    addRectangles(
+      lng1 = bbox[1], lat1 = bbox[2], lng2 = bbox[3], lat2 = bbox[4],
+      weight = 2, color = "purple", fillColor = "transparent") %>%
+    addScaleBar(position = "bottomleft")
+
+
+```
+
+Note that the result includes extra road segments beyond the bounding box. If the exact cut at the county border is desired, use the 'st_intersection()' function in the 'sf' package.
+
+```{r message=FALSE, warning=FALSE}
+library(sf)
+
+bbox <- getbb("Bartow County, Georgia")
+county <- getbb("Bartow County, Georgia",format_out = "sf_polygon")
+
+opq <- bbox %>% opq() %>%
+  add_osm_feature(key = "highway", value = c("motorway")) %>%
+  osmdata_sf()
+roads <- opq$osm_lines %>%  st_intersection(county)
+
+leaflet() %>%
+  addTiles() %>% 
+  addPolylines(data = roads, color = 'black', weight = 2) %>%
+  addPolygons(data = county,
+                weight = 2,color = 'purple', fillColor = 'transparent') %>%
+  addScaleBar(position='bottomleft')
+
+
+```

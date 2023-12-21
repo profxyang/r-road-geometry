@@ -1,5 +1,5 @@
 ---
-title: "Articles"
+title: "r-road-geometry Project Manual"
 date: "2023-12-17"
 output: html_document
 ---
@@ -11,6 +11,14 @@ Note: Some articles are under development
 
 * [Extract road geometry from ArcGIS REST service](https://profxyang.github.io/r-road-geometry/t1_extract)
 
-* Extract road geometry from OpenStreetMap (OSM)
+* [Extract road geometry from OpenStreetMap](https://profxyang.github.io/r-road-geometry/t2_extract)
 
-* Convert 2D road geometry to 3D
+* Identify unique routes from a network
+
+* Get 3D centerline alignment of a route
+
+* Identify bridges from the centerline alignement of a route
+
+* Horizontal alignment analysis
+
+* Vertical alignment analysis
