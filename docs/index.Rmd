@@ -13,9 +13,9 @@ Note: Some articles are under development
 
 * [Extract road geometry from OpenStreetMap](https://profxyang.github.io/r-road-geometry/t2_extract)
 
-* Identify unique routes from a network
+* [Identify unique simple routes from a network](https://profxyang.github.io/r-road-geometry/t3_uniqueroutes)
 
-* Get 3D centerline alignment of a route
+* Get 3D alignment of a route
 
 * Identify bridges from the centerline alignement of a route
 
