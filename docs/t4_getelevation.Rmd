@@ -1,0 +1,133 @@
+---
+title: "Get Elevation Data for a 2D Route"
+author: "Xiaoming Yang"
+date: "2023-12-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This article introduces the procedure of using R to extract [3DEP](https://www.usgs.gov/3d-elevation-program) elevation data along a road. The 3DEP data, produced by [USGS](https://www.usgs.gov/), is currently the best quality digital elevation model (DEM) data in the United States. For alignment analysis, we will evaluate the elevation at regularly spaced evaluation points. 
+
+The sample route used in this analysis is the I-75NB in Bartow County Georgia. The 2D geometry of the route can be obtained from US census. 
+
+
+```{r}
+library(httr2)
+library(sf)
+url <- url_parse("https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services")
+url$path <- paste(url$path, "TIGER_Roads_2021_view/FeatureServer/0/query", sep = "/")
+url$query <- list(where = "RTTYP = 'I'",
+                  geometryType = "esriGeometryEnvelope",
+                  geometry="-85.05,34.08,-84.66,34.39",
+                  spatialRel="esriSpatialRelEnvelopeIntersects",
+                  outFields = "*",
+                  returnGeometry = "true",
+                  f = "geojson")
+request <- url_build(url)
+roads<-st_read(request)
+route<-roads[2,] #NB
+
+library(leaflet)
+leaflet() %>%
+  addTiles() %>%
+  addPolylines(data=route, color = 'black', weight = 2) %>%
+  addCircleMarkers(data=route%>%st_geometry()%>%st_cast('POINT'), color = 'blue',weight = 2,radius = 2) %>%
+  addScaleBar(position='bottomleft')
+
+```
+
+
+Note that the vertices along the route is not regularly spaced. To set regularly spaced vertices along the route, we will use the st_line_sample() function in the 'sf' package. This function only works when the coordinate reference system (CRS) is projected (such as 3857), so transformation is needed. The code below calculates the coordinates of the elevation evaluation points at a target resolution of 50m.
+
+
+```{r}
+tres <- 50
+tot_length <- st_length(route) %>% as.numeric()
+vector <- seq(from = 0, to = 1, by = 1 / (tot_length / tres))
+sample_pts <- st_line_sample(route %>% st_transform(3857), sample = vector)
+pts <- sample_pts %>%
+  st_transform(4326) %>%
+  st_cast("POINT")
+
+leaflet() %>%
+  addTiles() %>%
+  addPolylines(data=route, color = 'black', weight = 2) %>%
+  addCircleMarkers(data=pts, color = 'blue',weight = 2,radius = 2) %>%
+  addScaleBar(position='bottomleft')
+```
+
+
+At the time of this project, the easiest way to access the elevation data in R is through the get_epqs() function in the 'elevatr' package. The get_epqs() function queries the [EPQS API](https://apps.nationalmap.gov/epqs/) through 'httr'. The function does not return information such as data acquisition date or resolution. Users can try some coordinates in the area on the [EPQS API](https://apps.nationalmap.gov/epqs/) webpage to find the information. As of 2023, 1-m resolution elevation data covers many areas in the United States.
+
+The code below calls the get_epqs() function. Missing data points are counted and replaced with linearly interpolated values. 
+
+
+```{r}
+library(elevatr)
+usgs_elev<-get_elev_point(pts %>% st_as_sf(), prj = 4326, src = "epqs")
+cat("Requested", nrow(usgs_elev), "elevation records from USGS.", 
+    sum(is.na(usgs_elev)), "records missing.\n" )
+usgs_elev$elevation<-imputeTS::na_interpolation(usgs_elev$elevation)
+
+plot(usgs_elev$elevation,type = "l", ylab = 'elevation (m)')
+```
+
+The above codes are wrapped in the get_elevation() function. This function accepts two inputs: an sf object and a target resolution in m. The output of the function is an sf object of XYZ type.
+
+
+```{r}
+get_elevation <- function(route, tres) {
+  library(elevatr)
+  tot_length <- st_length(route) %>% as.numeric()
+  vector <- seq(from = 0, to = 1, by = 1 / (tot_length / tres))
+  sample_pts <- st_line_sample(route %>% st_transform(3857), sample = vector)
+  pts <- sample_pts %>%
+    st_transform(4326) %>%
+    st_cast("POINT")
+  usgs_elev <- get_elev_point(pts %>% st_as_sf(), prj = 4326, src = "epqs")
+  cat(
+    "Requested", nrow(usgs_elev), "elevation records from USGS.",
+    sum(is.na(usgs_elev)), "records missing.\n"
+  )
+  usgs_elev$elevation <- imputeTS::na_interpolation(usgs_elev$elevation)
+  
+  route3d <- cbind(pts %>% st_geometry() %>% st_coordinates(),
+    "Z" = usgs_elev$elevation) %>%
+    st_linestring(dim = "XYZ") %>%
+    st_sfc() %>% 
+    st_set_crs(4326)
+}
+```
+
+Apply the get_elevation() function on the sample route with different target resolutions.
+
+```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
+len_tot <- st_length(route) %>% as.numeric()
+
+coords <- get_elevation(route,20) %>%
+          st_coordinates()
+df20 <- data.frame(dist = (c(1:nrow(coords)) - 1) / (nrow(coords) - 1) * len_tot,
+                 elev = coords[, 3])
+plot(df20,xlab="Distance (m)",ylab="Elevation (m)",type="l",col = 'blue',
+     cex.lab = 1.5, cex.axis = 1.5)
+
+coords <- get_elevation(route,50) %>%
+          st_coordinates()
+df50 <- data.frame(dist = (c(1:nrow(coords)) - 1) / (nrow(coords) - 1) * len_tot,
+                 elev = coords[, 3])
+plot(df50,xlab="Distance (m)",ylab="Elevation (m)",type="l",col = 'blue',
+     cex.lab = 1.5, cex.axis = 1.5)
+
+coords <- get_elevation(route,100) %>%
+          st_coordinates()
+df100 <- data.frame(dist = (c(1:nrow(coords)) - 1) / (nrow(coords) - 1) * len_tot,
+                 elev = coords[, 3])
+plot(df100,xlab="Distance (m)",ylab="Elevation (m)",type="l",col = 'blue',
+     cex.lab = 1.5, cex.axis = 1.5)
+
+
+```
+
