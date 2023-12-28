@@ -1,0 +1,183 @@
+---
+title: "Identify bridges from the 3DEP elevation profile along a route"
+author: "Xiaoming Yang"
+date: "2023-12-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The [3DEP](https://www.usgs.gov/3d-elevation-program) elevation obtained from the [EPQS API](https://apps.nationalmap.gov/epqs/) represents the ground elevation instead of the road surface elevation. The Elevation profile shows 'erratic' data points at the location of bridges. This article discusses the identification of bridges along a route and the data treatment method. 
+
+First let's look at some example data. The following code extracts 2D geometry of the I-75NB in Bartow County.
+
+```{r message=FALSE, warning=FALSE}
+library(osmdata)
+library(leaflet)
+library(sf)
+bbox <- getbb("Bartow County, Georgia")
+county <- getbb("Bartow County, Georgia",format_out = "sf_polygon")
+
+opq <- bbox %>% opq() %>%
+  add_osm_feature(key = "highway", value = c("motorway")) %>%
+  osmdata_sf()
+roads <- opq$osm_lines %>%  st_intersection(county)
+
+library(sfnetworks)
+library(tidygraph)
+get_routes <- function(sfc){
+
+  
+  net <- as_sfnetwork(sfc$geometry)
+  smooth_net<-convert(net,to_spatial_smooth)
+  clean_net <- convert(smooth_net, to_spatial_subdivision)
+  
+  sfc_edges <- st_as_sf(clean_net, "edges")
+  start_pts <- setdiff(sfc_edges$from, sfc_edges$to)
+  end_pts <- setdiff(sfc_edges$to, sfc_edges$from)
+  
+
+  n_paths = st_network_paths(clean_net, from = start_pts[1], to=end_pts,type = "all_simple" )
+  for (i in start_pts[-1]) {
+    pathi <- st_network_paths(clean_net, from = i, to = end_pts, type = "all_simple")
+    n_paths <- rbind(n_paths, pathi)
+  }
+  
+  find_epath <- function(array) {
+    ep <- st_network_paths(clean_net, from = head(array, 1), to = tail(array, 1)) %>%
+      pull(edge_paths) %>%
+      unlist()
+    return(sfc_edges[ep, ] %>% st_union() %>% st_sf())
+  }
+  
+  ls <- lapply(n_paths %>% pull(node_paths), find_epath)
+  
+  e_paths <- do.call(rbind, ls)
+  return(e_paths)
+}
+
+routes <- get_routes(roads)
+route <- routes[2,]
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%  
+  addPolylines(data = route, color = palette(rainbow(nrow(routes))), weight = 3) %>%
+  addScaleBar(position='bottomleft')
+
+```
+
+For demonstration, we will take out the beginning portion of this road (~11.6km) and extract the elevation profile. The following code gets the elevation profile (at 50m resolution) of the route by calling the get_elevation() function. Details about his function can be found in another article. 
+
+```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
+library(elevatr)
+get_elevation <- function(route, tres) {
+  tot_length <- st_length(route) %>% as.numeric()
+  vector <- seq(from = 0, to = 1, by = 1 / (tot_length / tres))
+  sample_pts <- st_line_sample(route %>% st_transform(3857), sample = vector)
+  pts <- sample_pts %>%
+    st_transform(4326) %>%
+    st_cast("POINT")
+  usgs_elev <- get_elev_point(pts %>% st_as_sf(), prj = 4326, src = "epqs")
+  cat(
+    "Requested", nrow(usgs_elev), "elevation records from USGS.",
+    sum(is.na(usgs_elev)), "records missing.\n"
+  )
+  usgs_elev$elevation <- imputeTS::na_interpolation(usgs_elev$elevation)
+  
+  route3d <- cbind(pts %>% st_geometry() %>% st_coordinates(),
+    "Z" = usgs_elev$elevation) %>%
+    st_linestring(dim = "XYZ") %>%
+    st_sfc() %>% 
+    st_set_crs(4326)
+}
+
+route2 <- route %>% 
+          st_coordinates() %>% 
+          head(150) %>% st_zm () %>% 
+          st_linestring() %>% 
+          st_sfc() %>% 
+          st_set_crs(4326)
+
+
+sf <- get_elevation(route2, 50)
+
+df<-sf %>%
+    st_transform(4326) %>%
+    st_coordinates() %>% 
+    data.frame()
+
+len_tot <- st_length(sf) %>% as.numeric()
+df$dist <- (c(1:nrow(df))-1)/(nrow(df)-1)*len_tot
+  
+plot(df$dist,df$Z,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+       ylab="Elevation (m)",cex.lab = 1.5, cex.axis = 1.5)
+```
+The 3DEP elevation service returns the ground (or water) surface elevation beneath the bridge. Visually it is easy to tell there are four bridges along the route. However, we need an algorithm to detect these erratic elevation points and replace them with best estimated bridge surface elevations automatically. The outlier detection algorithm in the 'forecast' package can be used for this purpose.
+
+```{r fig.height=5, fig.width=20}
+library(forecast)
+otlrs_z <- tsoutliers(df$Z)
+plot(df$dist,df$Z,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+       ylab="Elevation (m)",cex.lab = 1.5, cex.axis = 1.5)
+points(df[otlrs_z$index,]$dist,df[otlrs_z$index,]$Z, cex = 3, col = 'red')
+legend(11000,288, pch = 21, col = 'red',legend='Outliers',cex = 1.5)
+```
+At 50-m resolution, some of the outliers are not detected. Another option is to plot the vertical grade profile and detect outliers from there. 
+
+```{r fig.height=5, fig.width=20}
+res <- len_tot/(nrow(df)-1)
+g <- diff(df$Z)/res*100 # calculate G profile
+otlrs_g <- tsoutliers(g)
+
+plot(df$dist[-1],g,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+       ylab="Vertical Grade (%)",cex.lab = 1.5, cex.axis = 1.5)
+points(df[otlrs_g$index+1,]$dist,g[otlrs_g$index], cex=3, col = 'red') #Plot outliers identified.
+
+plot(df$dist,df$Z,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+       ylab="Vertical Grade (%)",cex.lab = 1.5, cex.axis = 1.5)
+points(df[otlrs_g$index+1,]$dist,df[otlrs_g$index+1,]$Z, cex=3, col = 'red') #Plot outliers identified.
+```
+Erratic points are amplified in the vertical grade profile therefore easier to detect. However, for a long bridge with a relatively flat ground/water elevation underneath, some vertical grade data under the bridge are not detected. 
+
+It is probably better to combine the two detection methods.
+
+```{r fig.height=5, fig.width=20}
+otlrs_z <- tsoutliers(df$Z)
+
+g <- diff(df$Z)/res*100 # calculate G profile
+otlrs_g <- tsoutliers(g)
+
+otlrs <- c(otlrs_z$index,otlrs_g$index+1) %>% unique() %>% sort()
+
+plot(df$dist,df$Z,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+       ylab="Elevation (m)",cex.lab = 1.5, cex.axis = 1.5)
+points(df[otlrs,]$dist,df[otlrs,]$Z, cex = 2, col = 'red')
+legend(11000,288, pch = 21, col = 'red',legend='Outliers',cex = 1.5)
+```
+
+First, replace the erratic points' vertical grade with NA then use the na_interpolation() in the 'imputeTS' package to determine replacements based on interpolation.
+
+```{r fig.height=5, fig.width=20}
+otlrs_z <- tsoutliers(df$Z)
+
+g <- diff(df$Z)/res*100 # calculate G profile
+otlrs_g <- tsoutliers(g)
+
+otlrs <- c(otlrs_z$index-1,otlrs_g$index) %>% unique() %>% sort()
+
+g[otlrs] <- NA
+
+g<-imputeTS::na_interpolation(g)
+plot(df$dist[-1],g,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+       ylab="Vertical Grade (%)",cex.lab = 1.5, cex.axis = 1.5)
+```
+Check the result by rebuilding the elevation profile.
+
+```{r fig.height=5, fig.width=20}
+plot(df$dist,df$Z,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+       ylab="Elevation (m)",cex.lab = 1.5, cex.axis = 1.5)
+lines(df$dist,diffinv(g*res/100,xi=df$Z[1]),col = 'red', lwd=2)
+```
+
