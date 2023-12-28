@@ -13,7 +13,7 @@
 
 <meta name="date" content="2023-12-20" />
 
-<title>1 - Extract 2D Road Geometry from ArcGIS REST Service</title>
+<title>Extract 2D Road Geometry from ArcGIS REST Service</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -350,8 +350,8 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">1 - Extract 2D Road Geometry from ArcGIS
-REST Service</h1>
+<h1 class="title toc-ignore">Extract 2D Road Geometry from ArcGIS REST
+Service</h1>
 <h4 class="author">Xiaoming Yang, Ph.D., P.E.</h4>
 <h4 class="date">2023-12-20</h4>
 
@@ -417,7 +417,7 @@ url &lt;- url_parse(&quot;https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/re
 url$path &lt;- paste(url$path, &quot;TIGER_Roads_2021_view/FeatureServer/0/query&quot;, sep = &quot;/&quot;)
 url$query &lt;- list(where = &quot;RTTYP = &#39;I&#39;&quot;,
                   geometryType = &quot;esriGeometryEnvelope&quot;,
-                  geometry=&quot;-85.05,34.08,-84.66,34.39&quot;,
+                  geometry = &quot;-85.05,34.08,-84.66,34.39&quot;,
                   spatialRel=&quot;esriSpatialRelEnvelopeIntersects&quot;,
                   outFields = &quot;*&quot;,
                   returnGeometry = &quot;true&quot;,

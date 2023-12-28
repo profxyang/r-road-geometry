@@ -1,5 +1,5 @@
 ---
-title: "1b - Extract 2D Road Geometry from OpenStreetMap (OSM)"
+title: "Extract 2D Road Geometry from OpenStreetMap (OSM)"
 author: "Xiaoming Yang"
 date: "2023-12-20"
 output: html_document

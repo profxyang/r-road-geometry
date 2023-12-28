@@ -1,6 +1,5 @@
 ---
 title: "r-road-geometry Project Manual"
-date: "2023-12-17"
 output: html_document
 ---
 
@@ -15,7 +14,7 @@ Note: Some articles are under development
 
 * [Identify unique simple routes from a network](https://profxyang.github.io/r-road-geometry/t3_uniqueroutes)
 
-* Get 3D alignment of a route
+* [Get elevation data for a 2D route](https://profxyang.github.io/r-road-geometry/t4_getelevation)
 
 * Identify bridges from the centerline alignement of a route
 
