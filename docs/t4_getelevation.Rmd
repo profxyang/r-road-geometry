@@ -29,7 +29,6 @@ url$query <- list(where = "RTTYP = 'I'",
 request <- url_build(url)
 roads<-st_read(request)
 route<-roads[2,] #NB
-
 library(leaflet)
 leaflet() %>%
   addTiles() %>%
@@ -40,11 +39,11 @@ leaflet() %>%
 ```
 
 
-Note that the vertices along the route is not regularly spaced. To set regularly spaced vertices along the route, we will use the st_line_sample() function in the 'sf' package. This function only works when the coordinate reference system (CRS) is projected (such as 3857), so transformation is needed. The code below calculates the coordinates of the elevation evaluation points at a target resolution of 50m.
+Note that the vertices along the route is not regularly spaced. To set regularly spaced vertices along the route, we will use the st_line_sample() function in the 'sf' package. This function only works when the coordinate reference system (CRS) is projected (such as 3857), so transformation is needed. The code below calculates the coordinates of the elevation evaluation points at a target resolution of 100m.
 
 
 ```{r}
-tres <- 50
+tres <- 100
 tot_length <- st_length(route) %>% as.numeric()
 vector <- seq(from = 0, to = 1, by = 1 / (tot_length / tres))
 sample_pts <- st_line_sample(route %>% st_transform(3857), sample = vector)
@@ -72,7 +71,7 @@ cat("Requested", nrow(usgs_elev), "elevation records from USGS.",
     sum(is.na(usgs_elev)), "records missing.\n" )
 usgs_elev$elevation<-imputeTS::na_interpolation(usgs_elev$elevation)
 
-plot(usgs_elev$elevation,type = "l", ylab = 'elevation (m)')
+plot(usgs_elev$elevation, ylab = 'elevation (m)')
 ```
 
 The above codes are wrapped in the get_elevation() function. This function accepts two inputs: an sf object and a target resolution in m. The output of the function is an sf object of XYZ type.
@@ -80,13 +79,12 @@ The above codes are wrapped in the get_elevation() function. This function accep
 
 ```{r}
 get_elevation <- function(route, tres) {
-  library(elevatr)
   tot_length <- st_length(route) %>% as.numeric()
   vector <- seq(from = 0, to = 1, by = 1 / (tot_length / tres))
   sample_pts <- st_line_sample(route %>% st_transform(3857), sample = vector)
   pts <- sample_pts %>%
-    st_transform(4326) %>%
-    st_cast("POINT")
+  st_transform(4326) %>%
+  st_cast("POINT")
   usgs_elev <- get_elev_point(pts %>% st_as_sf(), prj = 4326, src = "epqs")
   cat(
     "Requested", nrow(usgs_elev), "elevation records from USGS.",
@@ -99,35 +97,41 @@ get_elevation <- function(route, tres) {
     st_linestring(dim = "XYZ") %>%
     st_sfc() %>% 
     st_set_crs(4326)
+  return(route3d)
 }
 ```
 
-Apply the get_elevation() function on the sample route with different target resolutions.
+We can compare the elevation profiles at different target resolutions. To better view the difference, let's use the first portion of the route (roughly 3.4km).
 
 ```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
-len_tot <- st_length(route) %>% as.numeric()
+route2 <- route %>% 
+          st_coordinates() %>% 
+          head(20) %>% st_zm () %>% 
+          st_linestring() %>% 
+          st_sfc() %>% 
+          st_set_crs(4326)
 
-coords <- get_elevation(route,20) %>%
+len_tot <- st_length(route2) %>% as.numeric()
+
+coords <- get_elevation(route2,20) %>%
           st_coordinates()
 df20 <- data.frame(dist = (c(1:nrow(coords)) - 1) / (nrow(coords) - 1) * len_tot,
                  elev = coords[, 3])
-plot(df20,xlab="Distance (m)",ylab="Elevation (m)",type="l",col = 'blue',
+plot(df20,xlab="Distance (m)",ylab="Elevation (m)",type="b",col = 'blue',
      cex.lab = 1.5, cex.axis = 1.5)
 
-coords <- get_elevation(route,50) %>%
+coords <- get_elevation(route2,50) %>%
           st_coordinates()
 df50 <- data.frame(dist = (c(1:nrow(coords)) - 1) / (nrow(coords) - 1) * len_tot,
                  elev = coords[, 3])
-plot(df50,xlab="Distance (m)",ylab="Elevation (m)",type="l",col = 'blue',
+plot(df50,xlab="Distance (m)",ylab="Elevation (m)",type="b",col = 'blue',
      cex.lab = 1.5, cex.axis = 1.5)
 
-coords <- get_elevation(route,100) %>%
+coords <- get_elevation(route2,100) %>%
           st_coordinates()
 df100 <- data.frame(dist = (c(1:nrow(coords)) - 1) / (nrow(coords) - 1) * len_tot,
                  elev = coords[, 3])
-plot(df100,xlab="Distance (m)",ylab="Elevation (m)",type="l",col = 'blue',
+plot(df100,xlab="Distance (m)",ylab="Elevation (m)",type="b",col = 'blue',
      cex.lab = 1.5, cex.axis = 1.5)
-
-
 ```
-
+The erratic elevation data points indicates the location of a bridge. This is because 3DEP data is for the ground surface. As the target resolution changes from 20m to 100m, the vertical alignment of the road is captured well, but the length of the bridge becomes less accurate. 
