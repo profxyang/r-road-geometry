@@ -18,6 +18,6 @@ Note: Some articles are under development
 
 * [Identify bridges from the centerline alignement of a route](https://profxyang.github.io/r-road-geometry/t5_smbridges)
 
-* Horizontal alignment analysis
+* [Horizontal alignment analysis](https://profxyang.github.io/r-road-geometry/t6_hanalysis)
 
 * Vertical alignment analysis
