@@ -1,0 +1,77 @@
+---
+title: "Horizontal Analysis"
+author: "Xiaoming Yang"
+date: "2023-12-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This article demonstrate the 'r-road-geometry project' in horizontal alignment analysis. The sample road used in this demonstration is the I-75NB in Bartow County. To run the code on this papge the function files 'fun_get_routes().R' and 'fun_horizontal_analysis.R' should be copied to the current working directory of R.
+
+First, load required packages and function files.
+```{r message=FALSE, warning=FALSE}
+library(osmdata)
+library(leaflet)
+library(sf)
+
+source('fun_get_routes.R') #identify unique routes
+source('fun_horizontal_analysis.R') #horizontal alignment analysis
+```
+
+
+The following code extracts the 2D road geometry from OpenStreetMap(OSM).
+
+```{r message=FALSE, warning=FALSE}
+bbox <- getbb("Bartow County, Georgia")
+county <- getbb("Bartow County, Georgia",format_out = "sf_polygon")
+
+opq <- bbox %>% opq() %>%
+  add_osm_feature(key = "highway", value = c("motorway")) %>%
+  osmdata_sf()
+roads <- opq$osm_lines %>%  st_intersection(county)
+
+routes <- get_routes(roads)
+route <- routes[2,]
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%  
+  addPolylines(data = route, color = palette(rainbow(nrow(routes))), weight = 3) %>%
+  addScaleBar(position='bottomleft')
+
+```
+
+Call the 'horizontal_analysis()' function. This function returns a sfc with all horizontal curves and tangent segments. These segments can be seperated into two collections: horizontal curves (hc) and horizontal tangents (ht). 
+
+```{r}
+hr<-horizontal_analysis(route)
+hc <- hr %>% filter(nmpd < 0.05) #h curves
+ht <- hr %>% filter(is.na(nmpd)) #h tangents
+
+#Plot curves with best fit circles
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=hc, color='blue', weight = 4) %>%
+  addPolylines(data=ht, color='black', weight = 2) %>%
+  addCircles(data=hc,lng = ~lngc, lat = ~latc, radius = ~rad, color = "red",  
+             weight = 1,fillColor = "transparent") %>%
+  addScaleBar(position='bottomleft')
+
+#Plot tangents
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=hc, color='blue', weight = 2) %>%
+  addPolylines(data=ht, color='black', weight = 4) %>%
+  addScaleBar(position='bottomleft')
+```
+
+A data summary can be easily obtained from R. 
+
+```{r}
+summary(hc)
+summary(ht)
+```
+
+
