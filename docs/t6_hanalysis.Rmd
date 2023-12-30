@@ -70,8 +70,8 @@ leaflet() %>%
 A data summary can be easily obtained from R. 
 
 ```{r}
-summary(hc)
-summary(ht)
+summary(hc[c('length','rad','mpd','nmpd')])
+summary(ht[c('length','mpd')])
 ```
 
 
