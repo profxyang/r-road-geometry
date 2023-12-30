@@ -1,12 +1,11 @@
 ---
-title: "r-road-geometry Project Manual"
+title: "r-road-geometry Project R Markdown Files"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-Note: Some articles are under development
 
 * [Extract road geometry from ArcGIS REST service](https://profxyang.github.io/r-road-geometry/t1_extract)
 
@@ -20,4 +19,4 @@ Note: Some articles are under development
 
 * [Horizontal alignment analysis](https://profxyang.github.io/r-road-geometry/t6_hanalysis)
 
-* Vertical alignment analysis
+* [Vertical alignment analysis](https://profxyang.github.io/r-road-geometry/t7_vanalysis)

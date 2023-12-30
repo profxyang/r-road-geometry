@@ -1,0 +1,113 @@
+---
+title: "Vertical Alignment Analysis"
+author: "Xiaoming Yang"
+date: "2023-12-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This article demonstrate the 'r-road-geometry project' in horizontal alignment analysis. The sample road used in this demonstration is the I-75NB in Bartow County. To run the code on this page, the function files 'fun_get_elevation().R' and 'fun_vertical_analysis.R' should be copied to the current working directory of R. Details about these functions can be found in previous articles. 
+
+
+First, load required packages and function files.
+```{r message=FALSE, warning=FALSE}
+library(osmdata)
+library(leaflet)
+library(sf)
+library(strucchange)
+library(forecast)
+
+source('fun_get_routes.R')
+source('fun_get_elevation.R') #identify unique routes
+source('fun_vertical_analysis.R') #horizontal alignment analysis
+```
+
+
+The following code extracts the 2D road geometry from OpenStreetMap(OSM).
+
+```{r message=FALSE, warning=FALSE}
+bbox <- getbb("Bartow County, Georgia")
+county <- getbb("Bartow County, Georgia",format_out = "sf_polygon")
+
+opq <- bbox %>% opq() %>%
+  add_osm_feature(key = "highway", value = c("motorway")) %>%
+  osmdata_sf()
+roads <- opq$osm_lines %>%  st_intersection(county)
+
+routes <- get_routes(roads)
+route <- routes[2,]
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%  
+  addPolylines(data = route, color = palette(rainbow(nrow(routes))), weight = 3) %>%
+  addScaleBar(position='bottomleft')
+
+```
+
+For demonstration, we will focus on the beginning portion (~11.6km) of the route.
+
+```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
+route2 <- route %>% 
+          st_coordinates() %>% 
+          head(150) %>% st_zm () %>% 
+          st_linestring() %>% 
+          st_sfc() %>% 
+          st_set_crs(4326)
+
+
+routes_xyz <- get_elevation(route2, 20)
+
+vr <- vertical_analysis(routes_xyz) 
+
+```
+
+The output of the vertical_analysis() function is only the segmentation result with break points.We should apply curve and tangent criteria to identify vertical curves and tangents.
+
+```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
+vr <- vr %>% mutate(type = ifelse(r2 >= 0.5, "vc",
+  ifelse(r2 <= 0.3 & std <= 1, "vt", "u")))
+```
+
+Finally, plot the result.
+
+```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
+coords <- routes_xyz %>% st_coordinates()
+len_tot <- st_length(routes_xyz) %>% as.numeric()
+df <- data.frame(
+  dist = (c(1:nrow(coords)) - 1) / (nrow(coords) - 1) * len_tot,
+  elev = coords[, 3]
+)
+
+plot(df,
+  xlab = "Distance (m)", ylab = "Elevation (m)", type = "o", col = "blue",
+  cex.lab = 1.5, cex.axis = 1.5,
+  ylim = c(200, 300)
+)
+abline(v = df[vr[-1, ]$from, ]$dist, lty = "dashed")
+
+for (i in 1:nrow(vr)) {
+  if (vr[i, ]$type == "vc") {
+    lines(x = c(df[vr[i, ]$from, ]$dist, df[vr[i, ]$to, ]$dist), y = c(207, 207), col = "red", lwd = 4)
+  }
+  if (vr[i, ]$type == "vt") {
+    lines(x = c(df[vr[i, ]$from, ]$dist, df[vr[i, ]$to, ]$dist), y = c(205, 205), col = "black", lwd = 4)
+    text(x = df[vr[i, ]$from, ]$dist + 100, y = 222, paste("G = ", round(vr[i, ]$avg, 2), "%"), srt = 90)
+  }
+}
+legend(10500, 300, lty = 1, lwd = 4, col = c("red", "black"), 
+       legend = c("Vertical curve", "Vertical tangent"), cex = 1)
+```
+Show vertical curves and tangents on a map.
+
+```{r}
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=vr[vr$type=="vc",]%>%st_zm(), color='red', weight = 3) %>%
+  addPolylines(data=vr[vr$type=="vt",]%>%st_zm(), color='black', weight = 3) %>%
+  addScaleBar(position='bottomleft')
+```
+
+
