@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This article demonstrate the 'r-road-geometry project' in horizontal alignment analysis. The sample road used in this demonstration is the I-75NB in Bartow County. To run the code on this page, the function files 'fun_get_elevation().R' and 'fun_vertical_analysis.R' should be copied to the current working directory of R. Details about these functions can be found in previous articles. 
+This article demonstrate the 'vertical_analysis' function. The sample road used in this demonstration is the I-75NB in Bartow County. To run the code on this page, the function files 'fun_get_elevation().R' and 'fun_vertical_analysis.R' should be copied to the current working directory of R. Details about these functions can be found in previous articles. 
 
 
 First, load required packages and function files.
@@ -47,7 +47,7 @@ leaflet() %>%
 
 ```
 
-For demonstration, we will focus on the beginning portion (~11.6km) of the route.
+For demonstration, we will focus on the beginning portion (~11.6km) of the route. The elevation data is extracted using the 'get_elevation()' function at 20m resolution.
 
 ```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
 route2 <- route %>% 
@@ -105,9 +105,16 @@ Show vertical curves and tangents on a map.
 ```{r}
 leaflet() %>%
   addProviderTiles(providers$CartoDB.Positron) %>% 
-  addPolylines(data=vr[vr$type=="vc",]%>%st_zm(), color='red', weight = 3) %>%
-  addPolylines(data=vr[vr$type=="vt",]%>%st_zm(), color='black', weight = 3) %>%
+  addPolylines(data=vr[vr$type=="vc",]%>%st_zm(), color='red', weight = 4) %>%
+  addPolylines(data=vr[vr$type=="vt",]%>%st_zm(), color='black', weight = 2) %>%
   addScaleBar(position='bottomleft')
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=vr[vr$type=="vc",]%>%st_zm(), color='red', weight = 2) %>%
+  addPolylines(data=vr[vr$type=="vt",]%>%st_zm(), color='black', weight = 4) %>%
+  addScaleBar(position='bottomleft')
+```
 ```
 
 
