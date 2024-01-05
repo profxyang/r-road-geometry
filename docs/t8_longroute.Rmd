@@ -1,0 +1,156 @@
+---
+title: "Analyze the vertical alignment of a long route (>10km)"
+author: "Xiaoming Yang"
+date: "2023-12-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In a previosu article we have demonstrated the vertical_analysis() function on a sample route of about 11.6 km long. If the function is directly applied to a longer route, the tsoutliers() function tend to be less sensitive to erratic elevation and grade points, and the breakpoints() function tend to pickup more segments. It is not sure if the former leads to the other. 
+
+First, load required packages and function files.
+```{r message=FALSE, warning=FALSE}
+library(osmdata)
+library(leaflet)
+library(sf)
+library(strucchange)
+library(forecast)
+
+source('fun_get_routes.R')
+source('fun_get_elevation.R') #identify unique routes
+source('fun_vertical_analysis.R') #horizontal alignment analysis
+```
+
+
+The following code extracts the 2D road geometry from OpenStreetMap(OSM). The sample route is I-75NB in Bartow County, Georgia.
+
+```{r message=FALSE, warning=FALSE}
+bbox <- getbb("Bartow County, Georgia")
+county <- getbb("Bartow County, Georgia",format_out = "sf_polygon")
+
+opq <- bbox %>% opq() %>%
+  add_osm_feature(key = "highway", value = c("motorway")) %>%
+  osmdata_sf()
+roads <- opq$osm_lines %>%  st_intersection(county)
+
+routes <- get_routes(roads)
+route <- routes[2,]
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%  
+  addPolylines(data = route, color = palette(rainbow(nrow(routes))), weight = 3) %>%
+  addScaleBar(position='bottomleft')
+
+```
+Get the elevation data at 20m resolution for the whole route.
+
+```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
+route <- route %>% 
+          st_coordinates() %>% st_zm () %>% 
+          st_linestring() %>% 
+          st_sfc() %>% 
+          st_set_crs(4326)
+routes_xyz <- get_elevation(route, 20)
+```
+
+The following code analyze the long route by 10km sections. After every analysis, the last two segments are combined into the next section.
+
+```{r fig.height=5, fig.width=20, message=FALSE, warning=FALSE}
+lsec<-500
+section<-routes_xyz %>% st_coordinates()
+start<-1
+end<-lsec
+route2<-section[start:end,1:3]%>% 
+        st_linestring() %>% 
+        st_sfc() %>% 
+        st_set_crs(4326)
+vr <- vertical_analysis(route2)
+
+start<- tail(vr,2)$from[1]
+end<-min(start+lsec-1,nrow(section))
+  
+while (start<nrow(section)) {
+  route2<-section[start:end,1:3]%>% 
+          st_linestring() %>% 
+          st_sfc() %>% 
+          st_set_crs(4326)
+  vr2 <- vertical_analysis(route2)
+  vr2 <- vr2 %>% mutate(from=from+start-1) %>% mutate(to=to+start-1)
+  vr<-rbind(head(vr,-2),vr2)
+  start<-tail(vr,2)$from[1]
+  end<-start+lsec-1
+  if (end>=nrow(section)) break
+}
+
+route2<-section[start:nrow(section),1:3]%>% 
+        st_linestring() %>% 
+        st_sfc() %>% 
+        st_set_crs(4326)
+vr2 <- vertical_analysis(route2)
+vr2 <- vr2 %>% mutate(from=from+start-1) %>% mutate(to=to+start-1)
+vr<-rbind(head(vr,-2),vr2)
+
+```
+Plot to see the result.
+
+```{r}
+vr <- vr %>% mutate(type = ifelse(r2 >= 0.5, "vc",
+  ifelse((r2 < 0.5 & std <= 0.5)|is.na(r2), "vt", "u")))
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=vr[vr$type=="vc",]%>%st_zm(), color='red', weight = 4) %>%
+  addPolylines(data=vr[vr$type=="vt",]%>%st_zm(), color='black', weight = 2) %>%
+  addScaleBar(position='bottomleft')
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=vr[vr$type=="vc",]%>%st_zm(), color='red', weight = 2) %>%
+  addPolylines(data=vr[vr$type=="vt",]%>%st_zm(), color='black', weight = 4) %>%
+  addScaleBar(position='bottomleft')
+```
+If we combine the result with horizontal analysis, we can generate some homogeneous segments:
+
+* Horizontal tangent with a straight grade
+* Entire horizontal curves with a straight grade
+* Entire horizontal curves in a vertical curve
+
+```{r}
+vc<-vr[vr$type=="vc",]
+vt<-vr[vr$type=="vt",]
+
+
+source('fun_horizontal_analysis.R') #horizontal alignment analysis
+hr<-horizontal_analysis(route)
+hc <- hr %>% filter(nmpd < 0.05) #h curves
+ht <- hr %>% filter(is.na(nmpd)) #h tangents
+
+# Horizontal tangent with a straight grade
+c<-st_intersection(st_buffer(vt,2),ht) 
+c$len<-st_length(c)
+htvt<- c %>% filter(as.numeric(len)>500)
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=htvt, color='black', weight = 2) %>%
+  addScaleBar(position='bottomleft')
+
+
+# Entire horizontal curves in a vertical tangent
+hcvt<-st_contains(st_buffer(vt,2),hc)
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=hc[c(17,20),], color='blue', weight = 3) %>%
+  addScaleBar(position='bottomleft')
+
+# Entire horizontal curves in a vertical tangent
+hcvc<-st_contains(st_buffer(vc,2),hc)
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolylines(data=hc[12,], color='blue', weight = 4) %>%
+  addPolylines(data=vc[26,]%>%st_zm(), color='red', weight = 1) %>%
+  addScaleBar(position='bottomleft')
+
+```
