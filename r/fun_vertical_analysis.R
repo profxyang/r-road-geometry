@@ -1,9 +1,9 @@
 # This function performs outlier treatment and segmentation
 # The input is the sf object which contains the elevation data of the route
 # The function returns an sfc object with information of all segments .
-# This function requires several libraries: "strucchange" "forecase" "sf"
+# This function requires several libraries: "strucchange" "forecast" "sf"
 
-vertical_analysis <- function(sf) { #sf<-a   ,    for testing
+vertical_analysis <- function(sf) {
 
   #convert sf to dataframe. This dataframe is for vertical profile
   df<-sf %>%
@@ -17,50 +17,25 @@ vertical_analysis <- function(sf) { #sf<-a   ,    for testing
   
   #calculate and report actual data resolution
   res <- len_tot/(nrow(df)-1) #resolution in m
-  cat('total length =', len_tot, 'm, elevation data extracted at', res,"m resolution.  ") 
   
-  #Find and replace outliers (bridges) based on vertical grade G profile
-  G <- diff(df$Z)/res*100 # calculate G provile
-  otlrs <- tsoutliers(G) #Find outliers of G based on the forecast package
+  #Find and replace outliers (bridges) based on both elevation and vertical grade G profiles
+  otlrs_z <- tsoutliers(df$Z)
+  g <- diff(df$Z)/res*100 # calculate G profile
+  otlrs_g <- tsoutliers(g)
+  otlrs <- c(otlrs_z$index-1,otlrs_g$index) %>% unique() %>% sort()
+  g[otlrs] <- NA
   
   #plot outliers on vertical profile
-  plot(df$dist,df$Z,type="l",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+  plot(df$dist,df$Z,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
        ylab="Elevation (m)",cex.lab = 1.5, cex.axis = 1.5)
-  points(df[otlrs$index+1,]$dist,df[otlrs$index+1,]$Z, col = 'red') #Plot outliers identified.
+  points(df[otlrs+1,]$dist,df[otlrs+1,]$Z, cex = 2, col = 'red')
   
-  #The default outlier replacement algorithm is tsclean(). It is not good enough
-  whole<-1:length(G)
-  normal<-whole[-otlrs$index]
-  cleanG<-G
-  for (i in otlrs$index){
-    leftindex<-mean(normal[normal<i]%>%tail(3))
-    leftvalue<-mean(G[normal[normal<i]%>%tail(3)])
-    rightindex<-mean(normal[normal>i]%>%head(3))
-    rightvalue<-mean(G[normal[normal>i]%>%head(3)])
-    cleanG[i]<-approx(c(leftindex,rightindex),c(leftvalue,rightvalue),i)$y
-  }
-  
+  #Data treatment
+  g<-imputeTS::na_interpolation(g)
   
   # Segmentation for vertical alignment 
-  df2 <- data.frame(x = df$dist[-1], y = cleanG) #create a data frame of distance vs G. 
-  
-  #For long routes with more than 1000 data points, the "split-lapply-combine" method can save significant time.
-  #The code below split the df dataframe into 1000 row sub data frames and apply segmt function and then merge results
-  #Skip these lines if you want to run the segmentation algorithm on the route at once. 
-  
-  
-  segmt <- function (dfs) {
-      bps <- breakpoints(y~x, data = dfs, h=ceiling(100/res)) # Minimum length of segment is 100m, or 110m?
-      dfs[bps$breakpoints,]%>%row.names%>%as.numeric()
-  }
-
-  if (len_tot>1000) {
-  bp <- df2 %>% split(rep(1:ceiling(nrow(df)/1000),each=1000)[1:nrow(df2)]) %>% 
-      lapply(segmt) %>% unlist() %>% array()
-  } else{
-  # If you want to run the segmentation algorithm on the route at once, un-comment the following line.
-  bp<-breakpoints(y~x, data=df2, h=10)$breakpoints
-  }
+  df2 <- data.frame(x = df$dist[-1], y = g) #create a data frame of distance vs G. 
+  bp<-breakpoints(y~x, data=df2, h=ceiling(100/res)-1)$breakpoints
   
   #Output segmentation result and plot
   if (sum(is.na(bp))>0){
@@ -68,33 +43,34 @@ vertical_analysis <- function(sf) { #sf<-a   ,    for testing
   } else {cat(length(bp)+1, 'segments detected!')}
   
   abline(v=df$dist[-1][bp],lty = 'dashed') #Show segmentation boundaries on the plot
-  plot(df2,xlab="Distance (m)",ylab="Vertical Grade (%)",cex.lab = 1.5, cex.axis = 1.5)
+  plot(df$dist[-1],g,type="o",col = 'blue', xlab="Distance (m)",  #Plot elevation profile
+       ylab="Vertical Grade (%)",cex.lab = 1.5, cex.axis = 1.5)
   abline(v=df$dist[-1][bp],lty = 'dashed') #Show segmentation boundaries on the plot
   
   #Prepare the result data frame
   #The data frame starts with the from and to of the segments (in G profile)
   if (sum(is.na(bp))>0){
-    result<-data.frame(from = 1,to=length(G))
-  } else {result <- data.frame(from = c(1,bp), to = c(bp,length(G)))}
+    result<-data.frame(from = 1,to=length(g))
+  } else {result <- data.frame(from = c(1,bp), to = c(bp,length(g)+1))}
   
   
   #regression coefficients a and b, r2, std, avg
-  result$a<-mapply(function (a,b){lm(y ~ x, data = df2[a:b,])$coefficients[[2]]}, result$from, result$to)
-  result$b<-mapply(function (a,b){lm(y ~ x, data = df2[a:b,])$coefficients[[1]]}, result$from, result$to)
-  result$r2<-mapply(function (a,b){summary(lm(y ~ x, data = df2[a:b,]))$r.square}, result$from, result$to)
-  result$std<-mapply(function (a,b){sd(df2[a:b,]$y)}, result$from, result$to)
-  result$avg<-mapply(function (a,b){mean(df2[a:b,]$y)}, result$from, result$to)
+  result$a<-mapply(function (a,b){lm(y ~ x, data = df2[a:b,])$coefficients[[2]]}, result$from, result$to-1)
+  result$b<-mapply(function (a,b){lm(y ~ x, data = df2[a:b,])$coefficients[[1]]}, result$from, result$to-1)
+  result$r2<-mapply(function (a,b){summary(lm(y ~ x, data = df2[a:b,]))$r.square}, result$from, result$to-1)
+  result$std<-mapply(function (a,b){sd(df2[a:b,]$y)}, result$from, result$to-1)
+  result$avg<-mapply(function (a,b){mean(df2[a:b,]$y)}, result$from, result$to-1)
             
   #G1 and G2 are calculated from vertical curve segments
   result <- result %>% mutate(G1=df2$x[from]*a+b) %>% 
-    mutate(G2=df2$x[to]*a+b) %>% 
+    mutate(G2=df2$x[to-1]*a+b) %>% 
     mutate(DG = abs(G2-G1)) %>%
     mutate(length = (to-from)*res)
   
   #Generate line geometries for the segments
   gen_geom <- function (a,b){
     points<-sf%>%st_cast("POINT")
-    points[a:b,]$geometry %>% st_coordinates() %>% st_linestring() %>% st_geometry()
+    points[a:b] %>% st_coordinates() %>% st_linestring() %>% st_geometry()
   }
   
   result$geom <- mapply(gen_geom, result$from, result$to) #generate linestring geometry
